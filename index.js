@@ -1,80 +1,103 @@
 const express = require('express');
-const bodyParser = require('body-parser');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-app.use(bodyParser.json());
+const port = 3000;
 
-let books = [];
+app.use(express.json());
 
-// Create a new book
-app.post('/books', (req, res) => {
+// Load book data from data.json
+let booksData = JSON.parse(fs.readFileSync('data.json', 'utf8'));
+
+
+// ✅ Get all books
+app.get('/books', (req, res) => {
+    res.json({ count: booksData.length, books: booksData });
+    
+});
+
+// ✅ Get a book by ID
+app.get('/books/:id', (req, res) => {
+    const book = booksData.find(b => b.book_id === req.params.id);
+    if (!book) {
+        return res.status(404).json({ message: "Book not found" });
+    }
+    res.json(book);
+});
+
+
+
+// ✅ Add a new book
+app.post('/books/add', (req, res) => {
     const { book_id, title, author, genre, year, copies } = req.body;
 
-    // Check if all fields are provided
     if (!book_id || !title || !author || !genre || !year || !copies) {
-        return res.status(400).json({ error: 'All book fields are required.' });
+        return res.status(400).json({ message: "Missing required fields: book_id, title, author, genre, year, copies" });
     }
 
-    // Check if the book already exists
-    if (books.some(book => book.book_id === book_id)) {
-        return res.status(400).json({ error: 'Book with this ID already exists.' });
-    }
-
-    // Add new book to the array
     const newBook = { book_id, title, author, genre, year, copies };
-    books.push(newBook);
-    res.status(201).json(newBook);
+    booksData.push(newBook);
+
+    fs.writeFileSync('data.json', JSON.stringify(booksData, null, 2));
+
+    res.status(201).json({ message: "Book added successfully", book: newBook });
 });
 
-// Retrieve all books
-app.get('/books', (req, res) => {
-    res.status(200).json(books);
-});
 
-// Retrieve a specific book by ID
-app.get('/books/:id', (req, res) => {
-    const book = books.find(b => b.book_id === req.params.id);
 
-    // If book not found, return 404
-    if (!book) {
-        return res.status(404).json({ error: 'Book not found.' });
+
+// ✅ Get books published after a certain year
+app.post('/books/after-year', (req, res) => {
+    const { year } = req.body;
+
+    if (typeof year !== 'number' || isNaN(year)) {
+        return res.status(400).json({ message: "Invalid year. Please provide a valid number." });
     }
 
-    res.status(200).json(book);
+    const filteredBooks = booksData.filter(book => book.year > year);
+
+    res.json({
+        count: filteredBooks.length,
+        books: filteredBooks.map(book => ({
+            title: book.title,
+            author: book.author,
+            year: book.year
+        }))
+    });
 });
 
-// Update a book
-app.put('/books/:id', (req, res) => {
-    const bookIndex = books.findIndex(b => b.book_id === req.params.id);
 
-    // If book not found, return 404
-    if (bookIndex === -1) {
-        return res.status(404).json({ error: 'Book not found.' });
-    }
-
-    // Update book information
-    const updatedBook = { ...books[bookIndex], ...req.body };
-    books[bookIndex] = updatedBook;
-
-    res.status(200).json(updatedBook);
-});
-
-// Delete a book
+// ✅ DELETE a book by ID
 app.delete('/books/:id', (req, res) => {
-    const bookIndex = books.findIndex(b => b.book_id === req.params.id);
+  const bookId = req.params.id;
+  
+  // Find the book
+  const bookIndex = booksData.findIndex(b => b.book_id === bookId);
+  
+  if (bookIndex === -1) {
+      return res.status(404).json({ message: "Book not found" });
+  }
 
-    // If book not found, return 404
-    if (bookIndex === -1) {
-        return res.status(404).json({ error: 'Book not found.' });
-    }
+  // Remove the book
+  const deletedBook = booksData.splice(bookIndex, 1);
 
-    // Remove book from the array
-    books.splice(bookIndex, 1);
-    res.status(200).json({ message: 'Book deleted successfully.' });
+  // Save the updated list to data.json
+  fs.writeFileSync('data.json', JSON.stringify(booksData, null, 2));
+
+  res.json({ message: "Book deleted successfully", book: deletedBook[0] });
 });
 
-// Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+
+// ✅ Serve static files (for future use)
+app.use(express.static('static'));
+
+// ✅ Serve homepage
+app.get('/', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'pages/index.html'));
+});
+
+// ✅ Start the server
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
 });
